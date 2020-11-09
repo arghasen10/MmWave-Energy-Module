@@ -22,7 +22,7 @@
 #define MMWAVE_RADIO_ENERGY_MODEL_HELPER_H
 
 #include "ns3/energy-model-helper.h"
-#include "ns3/MmWave-radio-energy-model.h"
+#include "ns3/mmwave-radio-energy-model.h"
 
 namespace ns3 {
 
@@ -52,7 +52,7 @@ public:
    *
    * Sets an attribute of the underlying PHY object.
    */
-  void Set (std::string name, const AttributeValue &v);
+  void Set (std::string name, const AttributeValue &v){}
 
   /**
    * \param callback Callback function for energy depletion handling.
