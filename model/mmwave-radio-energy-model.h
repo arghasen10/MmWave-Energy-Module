@@ -23,81 +23,8 @@
 #include "ns3/device-energy-model.h"
 #include "ns3/traced-value.h"
 #include "ns3/nstime.h"
-#include "mmwave-phy-listener.h"
-#include "mmwave-phy-state.h"
-#include "ns3/event-id.h"
 
 namespace ns3 {
-
-class MmWaveRadioEnergyModelPhyListener : public MmWavePhyListener
-{
-
-public:
-    MmWaveRadioEnergyModelPhyListener ();
-    virtual ~MmWaveRadioEnergyModelPhyListener();
-
-    /**
-     * \brief Sets the change state callback. Used by helper class.
-     *
-     * \param callback Change state callback.
-     */
-    void SetChangeStateCallback (DeviceEnergyModel::ChangeStateCallback callback);
-
-    /**
-     * \brief Switches the MmWaveRadioEnergyModel to RX state.
-     *
-     * \param duration the expected duration of the packet reception.
-     *
-     * Defined in ns3::MmWavePhyListener
-     */
-    void NotifyRxStart (Time duration);
-
-    /**
-     * \brief Switches the MmWaveRadioEnergyModel back to IDLE state.
-     *
-     * Defined in ns3::MmWavePhyListener
-     *
-     * Note that for the MmWaveRadioEnergyModel, the behavior of the function is the
-     * same as NotifyRxEndError.
-     */
-    void NotifyRxEndOk (void);
-
-    /**
-     * \brief Switches the MmWaveRadioEnergyModel back to IDLE state.
-     *
-     * Defined in ns3::MmWavePhyListener
-     *
-     * Note that for the MmWaveRadioEnergyModel, the behavior of the function is the
-     * same as NotifyRxEndOk.
-     */
-    void NotifyRxEndError (void);
-
-    /**
-     * \brief Switches the MmWaveRadioEnergyModel to TX state and switches back to
-     * IDLE after TX duration.
-     *
-     * \param duration the expected transmission duration.
-     *
-     * Defined in ns3::MmWavePhyListener
-     */
-    void NotifyTxStart (Time duration);
-
-private:
-
-    /**
-     * A helper function that makes scheduling m_changeStateCallback possible.
-     */
-    void SwitchToIdle (void);
-
-    /**
-     * Change state callback used to notify the MmWaveRadioEnergyModel of a state
-     * change.
-     */
-    DeviceEnergyModel::ChangeStateCallback m_changeStateCallback;
-
-    EventId m_switchToIdleEvent; ///< switch to idle event
-
-};
 
 
 class MmWaveRadioEnergyModel : public DeviceEnergyModel
@@ -178,34 +105,7 @@ public:
      */
     void SetDeepSleepA (double deepSleepCurrentA);
 
-    /**
-     * \brief Gets light sleep current in Amperes.
-     *
-     * \returns light sleep current of the mmwave device.
-     */
-    double GetLightSleepA (void) const;
-
-    /**
-     * \brief Sets light sleep current in Amperes.
-     *
-     * \param lightSleepCurrentA the light sleep current
-     */
-    void SetLightSleepA (double lightSleepCurrentA);
-
-    /**
-     * \brief Gets micro sleep current in Amperes.
-     *
-     * \returns micro sleep current of the mmwave device.
-     */
-    double GetMicroSleepA (void) const;
-
-    /**
-     * \brief Sets micro sleep current in Amperes.
-     *
-     * \param microSleepCurrentA the micro sleep current
-     */
-    void SetMicroSleepA (double microSleepCurrentA);
-
+  
     /**
      * \brief Gets Rx current in Amperes.
      *
@@ -235,11 +135,6 @@ public:
     void SetTxCurrentA (double txCurrentA);
 
     /**
-     * \returns Current state.
-     */
-    MmWavePhyState GetCurrentState (void) const;
-
-    /**
      * \param callback Callback function.
      *
      * Sets callback for energy depletion handling.
@@ -261,13 +156,13 @@ public:
      * Implements DeviceEnergyModel::ChangeState.
      */
 
-    /**
-     * \param state the wifi state
-     *
-     * \returns the time the radio can stay in that state based on the remaining energy.
-     */
-    Time GetMaximumTimeInState (int state) const;
     void ChangeState (int newState);
+    /**
+     * \param oldState and newState
+     * 
+     * \brief Changes State from previousState to newState
+     */
+    void ChangeStateEvent (int32_t oldState, int32_t newState);
 
     /**
      * \brief Handles energy depletion.
@@ -282,19 +177,9 @@ public:
      * Implements DeviceEnergyModel::HandleEnergyRecharged
      */
     void HandleEnergyRecharged (void);
+    void HandleEnergyChanged (void){
 
-    /**
-     * \brief Handles energy changed.
-     *
-     * Implements DeviceEnergyModel::HandleEnergyChanged
-     */
-    void HandleEnergyChanged (void);
-    /**
-     * \returns Pointer to the PHY listener.
-     */
-    MmWaveRadioEnergyModelPhyListener * GetPhyListener (void);
-
-
+    }
 private:
     void DoDispose (void);
 
@@ -311,32 +196,20 @@ private:
      */
     double GetStateA (int state) const;
 
-    /**
-     * \param state New state the radio device is currently in.
-     *
-     * Sets current state. This function is private so that only the energy model
-     * can change its own state.
-     */
-    void SetMmWaveRadioState (const MmWavePhyState state);
-
-
     Time m_lastUpdateTime;
     double m_txCurrentA;
     double m_rxCurrentA;
     double m_deepSleepCurrentA;
     double m_lightSleepCurrentA;
     double m_microSleepCurrentA;
-    MmWavePhyState m_currentState;
+    int m_previousState;
+    int m_currentState;
 
     Ptr<EnergySource> m_source;
     Ptr<Node> m_node;
     TracedValue<double> m_totalEnergyConsumption;
-    uint8_t m_nPendingChangeState;
     MmWaveRadioEnergyRechargedCallback m_energyRechargedCallback;
     MmWaveRadioEnergyDepletionCallback m_energyDepletionCallback;
-
-    MmWaveRadioEnergyModelPhyListener *m_listener;
-    EventId m_switchToOffEvent;
 };
 
 

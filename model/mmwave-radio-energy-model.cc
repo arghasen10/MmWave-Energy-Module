@@ -27,12 +27,7 @@
 
 namespace ns3 {
 NS_LOG_COMPONENT_DEFINE ("MmWaveRadioEnergyModel");
-NS_OBJECT_ENSURE_REGISTERED ("MmWaveRadioEnergyModel");
-
-void traceuefunc (std::string path, RxPacketTraceParams params)
-{
-    
-}
+NS_OBJECT_ENSURE_REGISTERED (MmWaveRadioEnergyModel);
 
 TypeId
 MmWaveRadioEnergyModel::GetTypeId (void)
@@ -49,18 +44,6 @@ MmWaveRadioEnergyModel::GetTypeId (void)
                         DoubleValue (0.001),
                         MakeDoubleAccessor (&MmWaveRadioEnergyModel::SetDeepSleepA,
                                             &MmWaveRadioEnergyModel::GetDeepSleepA),
-                        MakeDoubleChecker<double> ())
-        .AddAttribute ("LightSleepA",
-                        "The default Light Sleep Current in Amperes.",
-                        DoubleValue (0.020),
-                        MakeDoubleAccessor (&MmWaveRadioEnergyModel::SetLightSleepA,
-                                            &MmWaveRadioEnergyModel::GetLightSleepA),
-                        MakeDoubleChecker<double> ())
-        .AddAttribute ("MicroSleepA",
-                        "The default Micro Sleep Current in Amperes.",
-                        DoubleValue (0.045),
-                        MakeDoubleAccessor (&MmWaveRadioEnergyModel::SetMicroSleepA,
-                                            &MmWaveRadioEnergyModel::GetMicroSleepA),
                         MakeDoubleChecker<double> ())
         .AddAttribute ("RxCurrentA",
                         "The default Rx current in Amperes",
@@ -79,24 +62,19 @@ MmWaveRadioEnergyModel::GetTypeId (void)
 }
 
 MmWaveRadioEnergyModel::MmWaveRadioEnergyModel ()
-:m_source (0),
- m_currentState (MmWavePhyState::IDLE),
- m_lastUpdateTime (Seconds(0.0)),
- m_nPendingChangeState (0)
+:
+ m_lastUpdateTime (Seconds(0.0))
 {
     NS_LOG_FUNCTION (this);
     m_energyDepletionCallback.Nullify ();
-    m_listener = new MmWaveRadioEnergyModelPhyListener;
-    m_listener->SetChangeStateCallback (MakeCallback(&DeviceEnergyModel::ChangeState, this));
-    
     m_source = 0;
-
+    m_currentState = 0;
+    m_lastUpdateTime = Seconds (0);
 }
 
 MmWaveRadioEnergyModel::~MmWaveRadioEnergyModel ()
 {
     NS_LOG_FUNCTION (this);
-    delete m_listener;
 }
 
 void
@@ -105,9 +83,6 @@ MmWaveRadioEnergyModel::SetEnergySource (Ptr<EnergySource> source)
     NS_LOG_FUNCTION (this << source);
     NS_ASSERT (source != NULL);
     m_source = source;
-    m_switchToOffEvent.Cancel ();
-    Time durationOff = GetMaximumTimeInState (m_currentState);
-    m_switchToOffEvent = Simulator::Schedule(durationOff, &MmWaveRadioEnergyModel::ChangeState, this, MmWavePhyState::IDLE);
 }
 
 void
@@ -154,67 +129,33 @@ MmWaveRadioEnergyModel::SetDeepSleepA (double deepSleepA)
   m_deepSleepCurrentA = deepSleepA;
 }
 
+
 double 
-MmWaveRadioEnergyModel::GetLightSleepA (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_lightSleepCurrentA;
-}
-
-void
-MmWaveRadioEnergyModel::SetLightSleepA (double lightSleepA)
-{
-  NS_LOG_FUNCTION (this << lightSleepA);
-  m_lightSleepCurrentA = lightSleepA;
-}
-
-void 
-MmWaveRadioEnergyModel::GetMicroSleepA (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_microSleepCurrentA;
-}
-
-double
-MmWaveRadioEnergyModel::SetMicroSleepA (double microSleepA)
-{
-  NS_LOG_FUNCTION (this << microSleepA);
-  m_microSleepCurrentA = microSleepA;
-}
-
-void 
 MmWaveRadioEnergyModel::GetRxCurrentA (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_rxCurrentA;
 }
 
-double 
+void 
 MmWaveRadioEnergyModel::SetRxCurrentA (double rxCurrentA)
 {
   NS_LOG_FUNCTION (this << rxCurrentA);
   m_rxCurrentA = rxCurrentA;
 } 
 
-void 
+double 
 MmWaveRadioEnergyModel::GetTxCurrentA (void) const
 {
   NS_LOG_FUNCTION (this);
   return m_txCurrentA;
 }
 
-double 
+void 
 MmWaveRadioEnergyModel::SetTxCurrentA (double txCurrentA)
 {
   NS_LOG_FUNCTION (this << txCurrentA);
   m_txCurrentA = txCurrentA;
-}
-
-MmWavePhyState
-MmWaveRadioEnergyModel::GetCurrentState (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_currentState;
 }
 
 void
@@ -243,38 +184,16 @@ MmWaveRadioEnergyModel::SetEnergyRechargedCallback (
   m_energyRechargedCallback = callback;
 }
 
-Time
-MmWaveRadioEnergyModel::GetMaximumTimeInState (int state) const
+void 
+MmWaveRadioEnergyModel::ChangeStateEvent(int32_t oldState, int32_t newState)
 {
-  // if (state == MmWavePhyState::IDLE)
-  // {
-  //   NS_FATAL_ERROR ("Requested maximum remaining time for OFF state");
-  // }
-  double remainingEnergy = m_source->GetRemainingEnergy ();
-  double supplyVoltage = m_source->GetSupplyVoltage ();
-  double current  = GetStateA (state);
-  return Seconds (remainingEnergy / (current*supplyVoltage));
+  ChangeState (newState);
 }
-
 void 
 MmWaveRadioEnergyModel::ChangeState (int state)
 {
   NS_LOG_FUNCTION (this << state);
 
-  m_nPendingChangeState ++;
-  if (m_nPendingChangeState > 1 && state == MmWavePhyState::IDLE)
-  {
-    SetMmWaveRadioState ( (MmWavePhyState) state);
-    m_nPendingChangeState --;
-    return;
-  }
-
-  if (state != MmWavePhyState::IDLE)
-  {
-    m_switchToOffEvent.Cancel ();
-    Time durationToOff = GetMaximumTimeInState (state);
-    m_switchToOffEvent = Simulator::Schedule (durationToOff, &MmWaveRadioEnergyModel::ChangeState, this, MmWavePhyState::IDLE);
-  }
 
   Time duration = Simulator::Now () - m_lastUpdateTime;
   NS_ASSERT (duration.IsPositive ());
@@ -287,16 +206,9 @@ MmWaveRadioEnergyModel::ChangeState (int state)
 
   m_lastUpdateTime = Simulator::Now ();
   m_source->UpdateEnergySource ();
+  m_currentState = state;
+  m_previousState = m_currentState;
 
-  if (m_nPendingChangeState <= 1 && m_currentState != MmWavePhyState::IDLE)
-  {
-    SetMmWaveRadioState ((MmWavePhyState) state);
-
-    // some debug message
-    NS_LOG_DEBUG ("MmWaveRadioEnergyModel:Total energy consumption is " <<
-              m_totalEnergyConsumption << "J");
-  } 
-  m_nPendingChangeState --;
 
 }
 
@@ -324,25 +236,6 @@ MmWaveRadioEnergyModel::HandleEnergyRecharged (void)
     }
 }
 
-void
-MmWaveRadioEnergyModel::HandleEnergyChanged (void)
-{
-  NS_LOG_FUNCTION (this);
-  NS_LOG_DEBUG ("MmWaveRadioEnergyModel:Energy is changed!");
-  if (m_currentState != MmWavePhyState::OFF)
-    {
-      m_switchToOffEvent.Cancel ();
-      Time durationToOff = GetMaximumTimeInState (m_currentState);
-      m_switchToOffEvent = Simulator::Schedule (durationToOff, &MmWaveRadioEnergyModel::ChangeState, this, MmWavePhyState::IDLE);
-    }
-}
-
-MmWaveRadioEnergyModelPhyListener *
-MmWaveRadioEnergyModel::GetPhyListener (void)
-{
-  NS_LOG_FUNCTION (this);
-  return m_listener;
-}
 
 /* 
 * Private functions start here
@@ -361,14 +254,14 @@ MmWaveRadioEnergyModel::GetStateA (int state) const
 {
   switch (state)
   {
-  case MmWavePhyState::IDLE:
+  case 0:
     return m_deepSleepCurrentA;
-  case MmWavePhyState::RX_CTRL:
-    return m_rxCurrentA;
-  case MmWavePhyState::RX_DATA:
-    return m_rxCurrentA;
-  case MmWavePhyState::TX:
+  case 1:
     return m_txCurrentA;
+  case 2:
+    return m_rxCurrentA;
+  case 3:
+    return m_rxCurrentA;
   }
   NS_FATAL_ERROR ("MmWaveRadioEnergyModel: undefined radio state " << state);
 }
@@ -390,8 +283,6 @@ MmWaveRadioEnergyModel::SetCurrentA (double current)
   m_lastUpdateTime = Simulator::Now ();
   // notify energy source
   m_source->UpdateEnergySource ();
-  // update the current drain
-  m_actualCurrentA = current;
 }
 
 
@@ -401,107 +292,5 @@ MmWaveRadioEnergyModel::DoGetCurrentA (void) const
   return GetStateA (m_currentState);
 }
 
-void 
-MmWaveRadioEnergyModel::SetMmWaveRadioState (const MmWavePhyState state)
-{
-  NS_LOG_FUNCTION (this << state);
-  m_currentState = state;
-  std::string stateName;
-  switch (state)
-  {
-  case MmWavePhyState::IDLE:
-    stateName = "IDLE";
-    break;
-  case MmWavePhyState::RX_CTRL:
-    stateName = "RX_CTRL";
-  case MmWavePhyState::RX_DATA:
-    stateName = "RX_DATA";
-    break;
-  case MmWavePhyState::TX:
-    stateName = "TX";
-    break;
-  }
-
-  NS_LOG_DEBUG ("MmWaveRadioEnergyModel:Switching to state: " << stateName <<
-                " at time = " << Simulator::Now ());
-}
-
-// -------------------------------------------------------------------------- //
-
-MmWaveRadioEnergyModelPhyListener::MmWaveRadioEnergyModelPhyListener ()
-{
-  NS_LOG_FUNCTION (this);
-  m_changeStateCallback.Nullify ();
-}
-MmWaveRadioEnergyModelPhyListener::~MmWaveRadioEnergyModelPhyListener ()
-{
-  NS_LOG_FUNCTION (this);
-}
-
-MmWaveRadioEnergyModelPhyListener::SetChangeStateCallback (DeviceEnergyModel::ChangeStateCallback callback)
-{
-  NS_LOG_FUNCTION (this << &callback);
-  NS_ASSERT (!callback.IsNull ());
-  m_changeStateCallback = callback;
-}
-
-void
-MmWaveRadioEnergyModelPhyListener::NotifyRxStart (Time duration)
-{
-  NS_LOG_FUNCTION (this << duration);
-  if (m_changeStateCallback.IsNull ())
-    {
-      NS_FATAL_ERROR ("MmWaveRadioEnergyModelPhyListener:Change state callback not set!");
-    }
-  m_changeStateCallback (MmWavePhyState::RX_DATA);
-  m_switchToIdleEvent.Cancel ();
-}
-
-void 
-MmWaveRadioEnergyModelPhyListener::NotifyRxEndOk (void)
-{
-  NS_LOG_FUNCTION (this);
-  if (m_changeStateCallback.IsNull ())
-  {
-    NS_FATAL_ERROR ("MmWaveRadioEnergyModelPhyListener:Change state callback not set!");
-  }
-  m_changeStateCallback (MmWavePhyState::IDLE);
-}
-
-void
-MmWaveRadioEnergyModelPhyListener::NotifyRxEndError (void)
-{
-  NS_LOG_FUNCTION (this);
-  if (m_changeStateCallback.IsNull ())
-    {
-      NS_FATAL_ERROR ("MmWaveRadioEnergyModelPhyListener:Change state callback not set!");
-    }
-  m_changeStateCallback (MmWavePhyState::IDLE);
-}
-
-void
-MmWaveRadioEnergyModelPhyListener::NotifyTxStart (Time duration)
-{
-  NS_LOG_FUNCTION (this << duration);
-  if (m_changeStateCallback.IsNull ())
-    {
-      NS_FATAL_ERROR ("MmWaveRadioEnergyModelPhyListener:Change state callback not set!");
-    }
-  m_changeStateCallback (MmWavePhyState::TX);
-  // schedule changing state back to IDLE after TX duration
-  m_switchToIdleEvent.Cancel ();
-  m_switchToIdleEvent = Simulator::Schedule (duration, &MmWaveRadioEnergyModelPhyListener::SwitchToIdle, this);
-}
-
-void
-MmWaveRadioEnergyModelPhyListener::SwitchToIdle (void)
-{
-  NS_LOG_FUNCTION (this);
-  if (m_changeStateCallback.IsNull ())
-    {
-      NS_FATAL_ERROR ("MmWaveRadioEnergyModelPhyListener:Change state callback not set!");
-    }
-  m_changeStateCallback (MmWavePhyState::IDLE);
-}
 
 }
